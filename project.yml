@@ -1,0 +1,17 @@
+name: Ghost
+options:
+  bundleIdPrefix: com.ghost
+  deploymentTarget:
+    macOS: 14.0
+targets:
+  Ghost:
+    type: application
+    platform: macOS
+    sources: [Ghost]
+    info:
+      path: Ghost/Info.plist
+      properties:
+        CFBundleIconName: AppIcon
+        NSHumanReadableCopyright: "Copyright © 2026 Ghost. All rights reserved."
+        NSPrincipalClass: NSApplication
+        LSApplicationCategoryType: public.app-category.utilities
