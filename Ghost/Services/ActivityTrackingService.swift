@@ -5,6 +5,7 @@ class ActivityTrackingService: FileSystemMonitorDelegate {
     
     private var repository: ActivityEventRepository?
     private var appMonitor: AppActivityMonitor?
+    private var usageMonitor: AppUsageMonitor?
     private var fileMonitor: FileSystemMonitor?
     private(set) var fileProcessor: FileChangeProcessor?
     
@@ -21,6 +22,7 @@ class ActivityTrackingService: FileSystemMonitorDelegate {
     func initialize(with repository: ActivityEventRepository) {
         self.repository = repository
         self.appMonitor = AppActivityMonitor(repository: repository)
+        self.usageMonitor = AppUsageMonitor(repository: repository)
         self.fileProcessor = FileChangeProcessor(repository: repository)
         
         let paths = [
@@ -39,11 +41,13 @@ class ActivityTrackingService: FileSystemMonitorDelegate {
     
     private func startTracking() {
         appMonitor?.start()
+        usageMonitor?.start()
         fileMonitor?.start()
     }
     
     private func stopTracking() {
         appMonitor?.stop()
+        usageMonitor?.stop()
         fileMonitor?.stop()
     }
     

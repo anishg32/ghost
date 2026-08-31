@@ -4,8 +4,13 @@ import SwiftData
 struct MenuBarView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \ActivityEvent.timestamp, order: .reverse) private var events: [ActivityEvent]
+    @Query(sort: \AppUsageSession.startTime, order: .reverse) private var sessions: [AppUsageSession]
     
     @State private var isTracking: Bool = ActivityTrackingService.shared.isTrackingEnabled
+    
+    @AppStorage("ghost_menuStatus") private var menuStatus = true
+    @AppStorage("ghost_menuLatestMemory") private var menuLatestMemory = true
+    @AppStorage("ghost_menuTopApps") private var menuTopApps = true
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -24,65 +29,89 @@ struct MenuBarView: View {
             }
             .padding()
             
-            // Today Summary
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Today")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .textCase(.uppercase)
-                
-                ActivityPulseGraph(events: events)
-                    .padding(.bottom, 4)
-                
-                let todayCount = events.filter { Calendar.current.isDateInToday($0.timestamp) }.count
-                HStack(spacing: 4) {
-                    AnimatedNumberView(value: todayCount)
-                    Text("actions remembered today")
-                }
-                .font(.caption)
-                .foregroundColor(.secondary)
-            }
-            .padding(.horizontal)
-            .padding(.bottom, 12)
-            
-            Divider()
-            
-            // Recent Activity
-            VStack(alignment: .leading, spacing: 0) {
-                Text("Recent")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .textCase(.uppercase)
-                    .padding(.horizontal)
-                    .padding(.vertical, 8)
-                
-                if events.isEmpty {
-                    Text("No recent activity.")
+            if menuStatus {
+                // Today Summary
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Today")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
-                        .padding(.horizontal)
-                        .padding(.bottom, 8)
-                } else {
-                    ForEach(events.prefix(3)) { event in
-                        MenuBarEventRow(event: event)
+                        .textCase(.uppercase)
+                    
+                    let todaySessions = sessions.filter { Calendar.current.isDateInToday($0.startTime) }
+                    let totalDuration = todaySessions.reduce(0) { $0 + $1.duration }
+                    
+                    Text("\(formattedDurationLong(totalDuration)) active")
+                        .font(.system(size: 20, weight: .bold))
+                    
+                    let todayCount = events.filter { Calendar.current.isDateInToday($0.timestamp) }.count
+                    HStack(spacing: 4) {
+                        AnimatedNumberView(value: todayCount)
+                        Text("actions remembered")
                     }
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 12)
+                
+                Divider()
+            }
+            
+            if menuLatestMemory {
+                // Latest memory text
+                if let latest = events.first {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("LATEST MEMORY")
+                            .font(.caption2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.secondary)
+                        
+                        Text(latest.title)
+                            .font(.subheadline)
+                            .lineLimit(1)
+                        
+                        Text(latest.timestamp, format: .relative(presentation: .numeric))
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 10)
+                    
+                    Divider()
                 }
             }
             
-            Divider().padding(.top, 4)
-            
-            // Latest memory text (if available)
-            if let latest = events.first {
-                HStack {
-                    Text("Latest memory · \(latest.title)")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                    Spacer()
+            if menuTopApps {
+                let topApps = calculateTopApps()
+                if !topApps.isEmpty {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("TOP APPS")
+                            .font(.caption2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal)
+                            .padding(.vertical, 10)
+                        
+                        ForEach(topApps, id: \.appName) { appData in
+                            HStack {
+                                Image(systemName: "app.fill")
+                                    .foregroundColor(.indigo)
+                                    .frame(width: 16)
+                                Text(appData.appName)
+                                    .font(.subheadline)
+                                Spacer()
+                                Text(formattedDurationShort(appData.duration))
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.horizontal)
+                            .padding(.vertical, 6)
+                        }
+                    }
+                    .padding(.bottom, 8)
+                    
+                    Divider()
                 }
-                .padding(.horizontal)
-                .padding(.vertical, 6)
-                .background(Color.secondary.opacity(0.05))
             }
             
             // Footer Actions
@@ -93,7 +122,7 @@ struct MenuBarView: View {
                         ActivityTrackingService.shared.isTrackingEnabled = isTracking
                     }
                 }) {
-                    Text(isTracking ? "Pause" : "Resume")
+                    Text(isTracking ? "Silence" : "Resume")
                         .font(.caption)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
@@ -155,7 +184,7 @@ struct MenuBarView: View {
             .padding(.bottom, 8)
             .background(Color(NSColor.windowBackgroundColor))
         }
-        .frame(width: 320)
+        .frame(width: 280)
         .onAppear {
             isTracking = ActivityTrackingService.shared.isTrackingEnabled
         }
@@ -192,37 +221,33 @@ struct MenuBarView: View {
         
         return .watching
     }
-}
-
-struct MenuBarEventRow: View {
-    let event: ActivityEvent
-    @State private var isHovered = false
     
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: event.eventType.icon)
-                .foregroundColor(event.eventType.color)
-                .frame(width: 20)
-                .scaleEffect(isHovered ? 1.1 : 1.0)
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text(event.title)
-                    .font(.subheadline)
-                    .lineLimit(1)
-                
-                Text(event.timestamp, format: .relative(presentation: .numeric))
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-            }
-            Spacer()
+    private func calculateTopApps() -> [(appName: String, duration: TimeInterval)] {
+        let todaySessions = sessions.filter { Calendar.current.isDateInToday($0.startTime) }
+        var dict: [String: TimeInterval] = [:]
+        for session in todaySessions {
+            dict[session.appName, default: 0] += session.duration
         }
-        .padding(.horizontal)
-        .padding(.vertical, 6)
-        .background(isHovered ? Color.primary.opacity(0.05) : Color.clear)
-        .onHover { hovering in
-            withAnimation(GhostUI.quickSpring) {
-                isHovered = hovering
-            }
+        return dict.map { (appName: $0.key, duration: $0.value) }
+            .sorted { $0.duration > $1.duration }
+            .prefix(3)
+            .map { $0 }
+    }
+    
+    private func formattedDurationLong(_ duration: TimeInterval) -> String {
+        let hours = Int(duration) / 3600
+        let minutes = (Int(duration) % 3600) / 60
+        if hours > 0 {
+            return "\(hours)h \(minutes)m"
+        } else {
+            return "\(minutes)m"
         }
+    }
+    
+    private func formattedDurationShort(_ duration: TimeInterval) -> String {
+        let hours = Int(duration) / 3600
+        let minutes = (Int(duration) % 3600) / 60
+        if hours > 0 { return "\(hours)h \(minutes)m" }
+        return "\(minutes)m"
     }
 }

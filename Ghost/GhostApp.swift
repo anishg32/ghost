@@ -6,6 +6,7 @@ struct GhostApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             ActivityEvent.self,
+            AppUsageSession.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 

@@ -18,4 +18,15 @@ actor ActivityEventRepository {
         modelContext.insert(event)
         try? modelContext.save()
     }
+    
+    func insertAppUsageSession(appName: String, bundleId: String?, startTime: Date, endTime: Date) {
+        let session = AppUsageSession(
+            appName: appName,
+            bundleId: bundleId,
+            startTime: startTime,
+            endTime: endTime
+        )
+        modelContext.insert(session)
+        try? modelContext.save()
+    }
 }

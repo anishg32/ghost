@@ -4,6 +4,7 @@ import SwiftData
 struct GhostTimelineView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \ActivityEvent.timestamp, order: .reverse) private var events: [ActivityEvent]
+    @Query(sort: \AppUsageSession.startTime, order: .reverse) private var sessions: [AppUsageSession]
     
     let recoveryService: RecoveryService
     
@@ -12,7 +13,13 @@ struct GhostTimelineView: View {
     @State private var selectedHistoryPath: String? = nil
     @State private var operationToConfirm: RecoveryOperation? = nil
     @State private var successMessage: String? = nil
+    @State private var showCustomization = false
+    
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    
+    @AppStorage("ghost_showActivityGraph") private var showActivityGraph = true
+    @AppStorage("ghost_showAppUsage") private var showAppUsage = true
+    @AppStorage("ghost_showMemoryStream") private var showMemoryStream = true
 
     var body: some View {
         ZStack {
@@ -21,19 +28,31 @@ struct GhostTimelineView: View {
                     // Header Area
                     headerSection
                     
-                    // Graph
-                    ActivityPulseGraph(events: events) { range in
-                        withAnimation(GhostUI.quickSpring) {
-                            highlightedTimeRange = range
+                    if showActivityGraph {
+                        // Graph
+                        ActivityPulseGraph(events: events) { range in
+                            withAnimation(GhostUI.quickSpring) {
+                                highlightedTimeRange = range
+                            }
                         }
+                        .padding(.horizontal, 30)
+                        .padding(.vertical, 20)
+                        .opacity(appearState > 2 || reduceMotion ? 1 : 0)
+                        .offset(y: appearState > 2 || reduceMotion ? 0 : 10)
+                        .transition(.move(edge: .top).combined(with: .opacity))
                     }
-                    .padding(.horizontal, 30)
-                    .padding(.vertical, 20)
-                    .opacity(appearState > 2 || reduceMotion ? 1 : 0)
-                    .offset(y: appearState > 2 || reduceMotion ? 0 : 10)
                     
-                    // Memory Stream
-                    memoryStreamSection
+                    if showAppUsage {
+                        UsageDashboardView()
+                            .opacity(appearState > 2 || reduceMotion ? 1 : 0)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                    
+                    if showMemoryStream {
+                        // Memory Stream
+                        memoryStreamSection
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
                     
                     Spacer(minLength: 40)
                 }
@@ -46,8 +65,19 @@ struct GhostTimelineView: View {
                     .zIndex(1)
             }
         }
+        .animation(GhostUI.gentleSpring, value: showActivityGraph)
+        .animation(GhostUI.gentleSpring, value: showAppUsage)
+        .animation(GhostUI.gentleSpring, value: showMemoryStream)
         .animation(GhostUI.gentleSpring, value: successMessage)
         .navigationTitle("Timeline")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: { showCustomization = true }) {
+                    Label("Customize", systemImage: "slider.horizontal.3")
+                }
+                .help("Customize Ghost Timeline")
+            }
+        }
         .onAppear {
             if !reduceMotion {
                 orchestrateEntrance()
@@ -58,6 +88,9 @@ struct GhostTimelineView: View {
         .animation(GhostUI.gentleSpring, value: events.count)
         .sheet(item: $selectedHistoryPath) { path in
             FileHistoryView(path: path)
+        }
+        .sheet(isPresented: $showCustomization) {
+            CustomizeGhostView()
         }
         .sheet(item: $operationToConfirm) { operation in
             RecoveryConfirmationSheet(operation: operation, service: recoveryService) { success in
@@ -153,6 +186,7 @@ struct GhostTimelineView: View {
                                 isHighlighted: isEventHighlighted(event),
                                 isDimmed: isDimmedByGraphHover(event),
                                 recoveryService: recoveryService,
+                                appName: findAppForEvent(event),
                                 onRecover: { recoverEvent(event) },
                                 onViewHistory: { viewHistory(for: event) }
                             )
@@ -184,6 +218,20 @@ struct GhostTimelineView: View {
     }
     
     // MARK: - Helpers
+    
+    private func findAppForEvent(_ event: ActivityEvent) -> String? {
+        // Find which app was in the foreground at the exact time of the event
+        if let appName = event.appName {
+            return appName
+        }
+        
+        let targetTime = event.timestamp
+        // We look for a session that contains this time.
+        if let match = sessions.first(where: { targetTime >= $0.startTime && targetTime <= $0.endTime }) {
+            return match.appName
+        }
+        return nil
+    }
     
     private func isEventHighlighted(_ event: ActivityEvent) -> Bool {
         event.isRecovery
@@ -314,6 +362,7 @@ struct MemoryStreamEventRow: View {
     let isHighlighted: Bool
     let isDimmed: Bool
     let recoveryService: RecoveryService
+    let appName: String?
     let onRecover: () -> Void
     let onViewHistory: () -> Void
     
@@ -357,6 +406,17 @@ struct MemoryStreamEventRow: View {
                             .foregroundColor(.yellow)
                             .font(.caption)
                             .help("Medium or Low Confidence")
+                    }
+                    
+                    if let app = appName {
+                        HStack(spacing: 4) {
+                            Text("in")
+                            Image(systemName: "app.fill")
+                            Text(app)
+                        }
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .padding(.leading, 6)
                     }
                 }
                 
