@@ -20,16 +20,16 @@ struct SilenceView: View {
             ZStack {
                 if activeDuration != nil {
                     Circle()
-                        .fill(Color.red.opacity(0.1))
+                        .fill(GhostUI.quietZone)
                         .frame(width: 150, height: 150)
                         .scaleEffect(isBreathing && !reduceMotion ? 1.2 : 1.0)
-                        .opacity(isBreathing && !reduceMotion ? 0.5 : 1.0)
+                        .opacity(isBreathing && !reduceMotion ? 0.7 : 1.0)
                         .animation(.easeInOut(duration: 3.0).repeatForever(autoreverses: true), value: isBreathing)
                 }
                 
                 Image(systemName: activeDuration != nil ? "bell.slash.fill" : "bell.slash")
                     .font(.system(size: 60))
-                    .foregroundColor(activeDuration != nil ? .red : .indigo)
+                    .foregroundColor(activeDuration != nil ? .secondary : .indigo)
                     .contentTransition(.symbolEffect(.replace))
             }
             .frame(height: 150)
@@ -41,7 +41,7 @@ struct SilenceView: View {
             
             if activeDuration != nil {
                 VStack(spacing: 8) {
-                    Text("Ends in")
+                    Text("Ghost is taking a break.")
                         .font(.title3)
                         .foregroundColor(.secondary)
                     
@@ -64,8 +64,8 @@ struct SilenceView: View {
                         .font(.headline)
                         .padding(.horizontal, 24)
                         .padding(.vertical, 12)
-                        .background(Color.red)
-                        .foregroundColor(.white)
+                        .background(Color.secondary.opacity(0.15))
+                        .foregroundColor(.primary)
                         .cornerRadius(12)
                 }
                 .buttonStyle(.plain)
@@ -92,6 +92,10 @@ struct SilenceView: View {
                                     .padding(.vertical, 10)
                                     .background(Color(NSColor.controlBackgroundColor))
                                     .cornerRadius(8)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(Color(NSColor.separatorColor).opacity(0.2), lineWidth: 0.5)
+                                    )
                             }
                             .buttonStyle(.plain)
                             .hoverScaleEffect()

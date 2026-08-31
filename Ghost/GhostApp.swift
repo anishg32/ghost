@@ -26,6 +26,19 @@ struct GhostApp: App {
             ContentView()
         }
         .modelContainer(sharedModelContainer)
+        .commands {
+            CommandGroup(after: .toolbar) {
+                Button("Recovery") {
+                    NotificationCenter.default.post(name: .ghostNavigateToRecovery, object: nil)
+                }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+                
+                Button("Search Memory") {
+                    NotificationCenter.default.post(name: .ghostNavigateToRecall, object: nil)
+                }
+                .keyboardShortcut("f", modifiers: [.command, .shift])
+            }
+        }
         
         MenuBarExtra("Ghost", systemImage: "ghost") {
             MenuBarView()
@@ -33,4 +46,11 @@ struct GhostApp: App {
         }
         .menuBarExtraStyle(.window) // Allows for a custom view layout in the menu bar
     }
+}
+
+// MARK: - Navigation Notifications
+
+extension Notification.Name {
+    static let ghostNavigateToRecovery = Notification.Name("ghostNavigateToRecovery")
+    static let ghostNavigateToRecall = Notification.Name("ghostNavigateToRecall")
 }

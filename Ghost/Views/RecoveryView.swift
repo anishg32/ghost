@@ -30,6 +30,9 @@ struct RecoveryView: View {
                         Text("Did something go wrong?")
                             .font(.title3)
                             .foregroundColor(.secondary)
+                        
+                        GhostShortcutHint(keys: "⌘⇧R")
+                            .padding(.top, 4)
                     }
                     .padding(.top, 40)
                     
@@ -56,16 +59,12 @@ struct RecoveryView: View {
                     
                     // Suggestions
                     if viewModel.recentRenames.isEmpty && viewModel.recentMoves.isEmpty {
-                        VStack(spacing: 16) {
-                            Text("🎉")
-                                .font(.system(size: 40))
-                            Text("Nothing needs recovering right now.")
-                                .font(.headline)
-                            Text("Recent supported changes will appear here.")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                        }
-                        .padding(.top, 30)
+                        GhostEmptyState(
+                            icon: "checkmark.circle",
+                            title: "Nothing needs recovering right now.",
+                            subtitle: "Recent supported changes will appear here."
+                        )
+                        .padding(.top, 10)
                     } else {
                         if !viewModel.recentRenames.isEmpty {
                             VStack(alignment: .leading, spacing: 10) {
@@ -139,7 +138,7 @@ struct RecoveryView: View {
         }
         .sheet(isPresented: $isShowingSearch) {
             NavigationStack {
-                RecallView(modelContainer: modelContext.container)
+                RecallView(modelContainer: modelContext.container, recoveryService: viewModel.recoveryService)
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
                             Button("Close") { isShowingSearch = false }
@@ -156,22 +155,24 @@ struct RecoveryView: View {
     }
 }
 
+// MARK: - Recovery Success View
+
 struct RecoverySuccessView: View {
     let message: String
     
-    @State private var phase = 0 // 0: initial, 1: show text, 2: show checkmark
+    @State private var phase = 0
     
     var body: some View {
         VStack(spacing: 20) {
             ZStack {
                 Image(systemName: "ghost.fill")
-                    .font(.system(size: 60))
+                    .font(.system(size: 50))
                     .foregroundColor(.indigo)
                     .opacity(phase == 0 ? 1 : 0)
                     .scaleEffect(phase == 0 ? 1 : 0.8)
                 
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 60))
+                    .font(.system(size: 50))
                     .foregroundColor(.green)
                     .opacity(phase == 2 ? 1 : 0)
                     .scaleEffect(phase == 2 ? 1 : 0.5)
@@ -189,6 +190,7 @@ struct RecoverySuccessView: View {
                     Text(target.trimmingCharacters(in: .whitespacesAndNewlines))
                         .foregroundColor(.secondary)
                     Image(systemName: "arrow.down")
+                        .foregroundColor(.secondary)
                     Text(dest.trimmingCharacters(in: .whitespacesAndNewlines))
                         .fontWeight(.bold)
                 }
@@ -199,19 +201,21 @@ struct RecoverySuccessView: View {
             }
         }
         .padding(40)
-        .background(Material.regular)
+        .background(.regularMaterial)
         .cornerRadius(20)
-        .shadow(radius: 20)
+        .shadow(color: .black.opacity(0.12), radius: 20)
         .onAppear {
-            withAnimation(GhostUI.gentleSpring.delay(0.2)) {
+            withAnimation(GhostUI.recoverTransition.delay(0.2)) {
                 phase = 1
             }
-            withAnimation(GhostUI.gentleSpring.delay(1.0)) {
+            withAnimation(GhostUI.recoverTransition.delay(1.0)) {
                 phase = 2
             }
         }
     }
 }
+
+// MARK: - Recovery Suggestion Card
 
 struct RecoverySuggestionCard: View {
     let event: RecallResult
@@ -250,6 +254,8 @@ struct RecoverySuggestionCard: View {
     }
 }
 
+// MARK: - Recovery Confirmation Sheet
+
 struct RecoveryConfirmationSheet: View {
     let operation: RecoveryOperation
     let service: RecoveryService
@@ -261,7 +267,14 @@ struct RecoveryConfirmationSheet: View {
         VStack(spacing: 20) {
             if isExecuting {
                 VStack(spacing: 16) {
-                    ProgressView()
+                    ZStack {
+                        Image(systemName: "ghost.fill")
+                            .font(.system(size: 36))
+                            .foregroundColor(.indigo)
+                            .opacity(0.6)
+                        
+                        ProgressView()
+                    }
                     Text("Recovering...")
                         .foregroundColor(.secondary)
                 }
@@ -297,7 +310,7 @@ struct RecoveryConfirmationSheet: View {
                             .keyboardShortcut(.escape, modifiers: [])
                         
                         Button(isRename ? "Restore" : "Move Back") {
-                            execute(resolution: .cancel) // No conflict
+                            execute(resolution: .cancel)
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.blue)
@@ -352,7 +365,7 @@ struct RecoveryConfirmationSheet: View {
         }
         .padding(30)
         .frame(width: 450, height: 300)
-        .animation(GhostUI.gentleSpring, value: isExecuting)
+        .animation(GhostUI.recoverTransition, value: isExecuting)
     }
     
     private func execute(resolution: RecoveryService.ConflictResolution) {

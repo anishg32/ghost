@@ -6,29 +6,21 @@ struct MenuBarView: View {
     @Query(sort: \ActivityEvent.timestamp, order: .reverse) private var events: [ActivityEvent]
     
     @State private var isTracking: Bool = ActivityTrackingService.shared.isTrackingEnabled
-    @State private var pulseIndicator = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
             HStack {
-                Text("👻 Ghost")
-                    .font(.headline)
-                Spacer()
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(isTracking ? Color.green : Color.orange)
-                        .frame(width: 8, height: 8)
-                        .scaleEffect(isTracking && pulseIndicator ? 1.2 : 1.0)
-                        .animation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true), value: pulseIndicator)
-                        .onAppear {
-                            pulseIndicator = true
-                        }
-                    Text(isTracking ? "Tracking" : "Paused")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .contentTransition(.interpolate)
+                HStack(spacing: 8) {
+                    GhostPulse(state: ghostState)
+                    Text("Ghost")
+                        .font(.headline)
                 }
+                Spacer()
+                Text(isTracking ? "Watching" : "Paused")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .contentTransition(.interpolate)
             }
             .padding()
             
@@ -79,6 +71,20 @@ struct MenuBarView: View {
             
             Divider().padding(.top, 4)
             
+            // Latest memory text (if available)
+            if let latest = events.first {
+                HStack {
+                    Text("Latest memory · \(latest.title)")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                    Spacer()
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 6)
+                .background(Color.secondary.opacity(0.05))
+            }
+            
             // Footer Actions
             HStack {
                 Button(action: {
@@ -128,6 +134,26 @@ struct MenuBarView: View {
             }
             .padding()
             .background(Color(NSColor.windowBackgroundColor))
+            
+            // Shortcut hints
+            HStack(spacing: 12) {
+                Spacer()
+                HStack(spacing: 4) {
+                    Text("Recovery")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    GhostShortcutHint(keys: "⌘⇧R")
+                }
+                HStack(spacing: 4) {
+                    Text("Recall")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    GhostShortcutHint(keys: "⌘⇧F")
+                }
+                Spacer()
+            }
+            .padding(.bottom, 8)
+            .background(Color(NSColor.windowBackgroundColor))
         }
         .frame(width: 320)
         .onAppear {
@@ -143,11 +169,28 @@ struct MenuBarView: View {
     
     private func openAppToRecall() {
         activateApp()
+        // Allow time for app to open before posting notification
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            NotificationCenter.default.post(name: .ghostNavigateToRecall, object: nil)
+        }
     }
     
     private func activateApp() {
         NSApp.activate(ignoringOtherApps: true)
         openWindow(id: "mainWindow")
+    }
+    
+    private var ghostState: GhostPresenceState {
+        if !isTracking { return .idle }
+        
+        if let latest = events.first {
+            // If the latest event was within the last 10 seconds, consider it "captured"
+            if Date().timeIntervalSince(latest.timestamp) < 10 {
+                return .captured
+            }
+        }
+        
+        return .watching
     }
 }
 
@@ -183,4 +226,3 @@ struct MenuBarEventRow: View {
         }
     }
 }
-

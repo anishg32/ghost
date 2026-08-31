@@ -37,7 +37,11 @@ struct ContentView: View {
                         Label("Recall", systemImage: "magnifyingglass")
                     }
                     NavigationLink(value: SidebarItem.recovery) {
-                        Label("Recovery", systemImage: "arrow.uturn.backward")
+                        HStack {
+                            Label("Recovery", systemImage: "arrow.uturn.backward")
+                            Spacer()
+                            GhostShortcutHint(keys: "⌘⇧R")
+                        }
                     }
                     NavigationLink(value: SidebarItem.silence) {
                         Label("Silence", systemImage: "bell.slash")
@@ -54,13 +58,16 @@ struct ContentView: View {
             .listStyle(.sidebar)
             .animation(GhostUI.gentleSpring, value: selection)
         } detail: {
+            let repository = ActivityEventRepository(modelContainer: modelContext.container)
+            let recoveryService = RecoveryService(repository: repository)
+            
             switch selection {
             case .timeline:
-                TimelineView()
+                GhostTimelineView(recoveryService: recoveryService)
             case .recall:
-                RecallView(modelContainer: modelContext.container)
+                RecallView(modelContainer: modelContext.container, recoveryService: recoveryService)
             case .recovery:
-                RecoveryView(modelContainer: modelContext.container, repository: ActivityEventRepository(modelContainer: modelContext.container))
+                RecoveryView(modelContainer: modelContext.container, repository: repository)
             case .silence:
                 SilenceView()
             case .settings:
@@ -70,6 +77,16 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 800, minHeight: 600)
+        .onReceive(NotificationCenter.default.publisher(for: .ghostNavigateToRecovery)) { _ in
+            withAnimation(GhostUI.gentleSpring) {
+                selection = .recovery
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .ghostNavigateToRecall)) { _ in
+            withAnimation(GhostUI.gentleSpring) {
+                selection = .recall
+            }
+        }
     }
 }
 
