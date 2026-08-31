@@ -4,6 +4,9 @@ import SwiftData
 struct TimelineView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \ActivityEvent.timestamp, order: .reverse) private var events: [ActivityEvent]
+    
+    @State private var appearState: Int = 0 // 0: hidden, 1: greeting, 2: stats, 3: graph, 4: list
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ScrollView {
@@ -13,12 +16,20 @@ struct TimelineView: View {
                     Text(greeting)
                         .font(.title2)
                         .fontWeight(.bold)
+                        .opacity(appearState > 0 || reduceMotion ? 1 : 0)
+                        .offset(y: appearState > 0 || reduceMotion ? 0 : 10)
                     
                     let stats = calculateStats()
                     
-                    Text("Your Mac remembered \(stats.todayCount) actions today.")
-                        .font(.title3)
-                        .foregroundColor(.secondary)
+                    HStack(spacing: 4) {
+                        Text("Your Mac remembered")
+                        AnimatedNumberView(value: stats.todayCount)
+                        Text("actions today.")
+                    }
+                    .font(.title3)
+                    .foregroundColor(.secondary)
+                    .opacity(appearState > 1 || reduceMotion ? 1 : 0)
+                    .offset(y: appearState > 1 || reduceMotion ? 0 : 10)
                     
                     if stats.yesterdayCount > 0 {
                         let diff = stats.todayCount - stats.yesterdayCount
@@ -30,6 +41,8 @@ struct TimelineView: View {
                         }
                         .font(.subheadline)
                         .foregroundColor(diff >= 0 ? .green : .secondary)
+                        .opacity(appearState > 1 || reduceMotion ? 1 : 0)
+                        .offset(y: appearState > 1 || reduceMotion ? 0 : 10)
                     }
                 }
                 .padding(.horizontal, 30)
@@ -39,6 +52,8 @@ struct TimelineView: View {
                 ActivityPulseGraph(events: events)
                     .padding(.horizontal, 30)
                     .padding(.vertical, 20)
+                    .opacity(appearState > 2 || reduceMotion ? 1 : 0)
+                    .offset(y: appearState > 2 || reduceMotion ? 0 : 10)
                 
                 // Event List
                 VStack(alignment: .leading, spacing: 0) {
@@ -48,19 +63,30 @@ struct TimelineView: View {
                         .foregroundColor(.secondary)
                         .padding(.horizontal, 30)
                         .padding(.bottom, 16)
+                        .opacity(appearState > 3 || reduceMotion ? 1 : 0)
                     
                     if events.isEmpty {
                         TimelineEmptyStateView()
+                            .opacity(appearState > 3 || reduceMotion ? 1 : 0)
                     } else {
                         LazyVStack(spacing: 16) {
-                            ForEach(groupedEvents) { group in
-                                if group.events.count == 1 {
-                                    EventRowView(event: group.events.first!)
-                                        .padding(.horizontal, 30)
-                                } else {
-                                    ExpandableGroupRowView(group: group)
-                                        .padding(.horizontal, 30)
+                            ForEach(Array(groupedEvents.enumerated()), id: \.element.id) { index, group in
+                                Group {
+                                    if group.events.count == 1 {
+                                        EventRowView(event: group.events.first!)
+                                            .padding(.horizontal, 30)
+                                    } else {
+                                        ExpandableGroupRowView(group: group)
+                                            .padding(.horizontal, 30)
+                                    }
                                 }
+                                .opacity(appearState > 3 || reduceMotion ? 1 : 0)
+                                .offset(y: appearState > 3 || reduceMotion ? 0 : 20)
+                                .animation(
+                                    GhostUI.motionAnimation(GhostUI.gentleSpring.delay(Double(index) * 0.05)),
+                                    value: appearState
+                                )
+                                .transition(.move(edge: .top).combined(with: .opacity))
                             }
                         }
                     }
@@ -71,6 +97,29 @@ struct TimelineView: View {
         }
         .navigationTitle("Timeline")
         .navigationDocument(URL(fileURLWithPath: "/")) // dummy to keep native title bar look
+        .onAppear {
+            if !reduceMotion {
+                orchestrateEntrance()
+            }
+        }
+        .animation(GhostUI.gentleSpring, value: events.count) // Smooth list updates when new events arrive
+    }
+    
+    private func orchestrateEntrance() {
+        // Staggered entrance animation
+        withAnimation(GhostUI.gentleSpring) { appearState = 1 }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            withAnimation(GhostUI.gentleSpring) { appearState = 2 }
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            withAnimation(GhostUI.gentleSpring) { appearState = 3 }
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            withAnimation(GhostUI.gentleSpring) { appearState = 4 }
+        }
     }
     
     private var greeting: String {
@@ -96,7 +145,6 @@ struct TimelineView: View {
             } else if event.timestamp >= yesterday && event.timestamp < today {
                 y += 1
             } else if event.timestamp < yesterday {
-                // Since they are reverse sorted, we can stop early to optimize
                 break
             }
         }
@@ -106,11 +154,19 @@ struct TimelineView: View {
 }
 
 struct TimelineEmptyStateView: View {
+    @State private var isFloating = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    
     var body: some View {
         VStack(spacing: 16) {
             Image(systemName: "moon.stars")
                 .font(.system(size: 40))
                 .foregroundColor(.secondary)
+                .offset(y: isFloating && !reduceMotion ? -5 : 5)
+                .animation(.easeInOut(duration: 2.5).repeatForever(autoreverses: true), value: isFloating)
+                .onAppear {
+                    isFloating = true
+                }
             
             Text("Nothing remembered yet.")
                 .font(.headline)
@@ -163,8 +219,8 @@ struct EventRowView: View {
                 .foregroundColor(Color(NSColor.tertiaryLabelColor))
         }
         .padding()
-        .background(event.isRecovery ? Color.blue.opacity(0.1) : Color(NSColor.controlBackgroundColor))
-        .cornerRadius(12)
+        .ghostCardStyle(backgroundColor: event.isRecovery ? Color.blue.opacity(0.1) : Color(NSColor.controlBackgroundColor))
+        .hoverScaleEffect()
     }
 }
 
@@ -175,7 +231,7 @@ struct ExpandableGroupRowView: View {
     var body: some View {
         VStack(spacing: 0) {
             Button(action: {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                GhostUI.withMotion(GhostUI.gentleSpring) {
                     isExpanded.toggle()
                 }
             }) {
@@ -203,6 +259,11 @@ struct ExpandableGroupRowView: View {
                             .font(.caption)
                             .foregroundColor(Color(NSColor.tertiaryLabelColor))
                     }
+                    
+                    Image(systemName: "chevron.right")
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .foregroundColor(.secondary)
+                        .font(.caption)
                 }
                 .padding()
             }
@@ -210,7 +271,7 @@ struct ExpandableGroupRowView: View {
             
             if isExpanded {
                 VStack(spacing: 8) {
-                    ForEach(group.events) { event in
+                    ForEach(Array(group.events.enumerated()), id: \.element.id) { index, event in
                         HStack {
                             Rectangle()
                                 .fill(Color.secondary.opacity(0.2))
@@ -232,13 +293,14 @@ struct ExpandableGroupRowView: View {
                             Spacer()
                         }
                         .padding(.vertical, 4)
+                        .transition(.move(edge: .top).combined(with: .opacity))
                     }
                 }
                 .padding(.bottom, 12)
             }
         }
-        .background(Color(NSColor.controlBackgroundColor))
-        .cornerRadius(12)
+        .ghostCardStyle()
+        .hoverScaleEffect()
     }
     
     private var previewText: String {
@@ -273,7 +335,6 @@ extension TimelineView {
         
         for event in events {
             if let last = currentGroupEvents.last {
-                // Group if same eventType, within 10 seconds, and NEITHER is a recovery event
                 if last.eventType == event.eventType && 
                    !last.isRecovery && 
                    !event.isRecovery &&
@@ -296,3 +357,4 @@ extension TimelineView {
         return groups
     }
 }
+

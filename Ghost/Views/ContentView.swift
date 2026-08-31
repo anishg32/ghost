@@ -15,6 +15,20 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             List(selection: $selection) {
+                // Refined Header
+                Section {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Image(systemName: "ghost.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(.indigo)
+                        Text("Ghost")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                    }
+                    .padding(.vertical, 8)
+                }
+                .listRowBackground(Color.clear)
+                
                 Section {
                     NavigationLink(value: SidebarItem.timeline) {
                         Label("Timeline", systemImage: "clock")
@@ -36,8 +50,9 @@ struct ContentView: View {
                     }
                 }
             }
-            .navigationTitle("👻 Ghost")
+            .navigationTitle("") // Hide default title since we have a custom header
             .listStyle(.sidebar)
+            .animation(GhostUI.gentleSpring, value: selection)
         } detail: {
             switch selection {
             case .timeline:

@@ -1,7 +1,5 @@
 import SwiftUI
 
-
-
 struct SilenceView: View {
     @State private var activeDuration: TimeInterval?
     @State private var remainingTime: TimeInterval = 0
@@ -14,37 +12,71 @@ struct SilenceView: View {
     
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     
+    @State private var isBreathing = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    
     var body: some View {
         VStack(spacing: 24) {
-            Image(systemName: activeDuration != nil ? "bell.slash.fill" : "bell.slash")
-                .font(.system(size: 60))
-                .foregroundColor(activeDuration != nil ? .red : .indigo)
+            ZStack {
+                if activeDuration != nil {
+                    Circle()
+                        .fill(Color.red.opacity(0.1))
+                        .frame(width: 150, height: 150)
+                        .scaleEffect(isBreathing && !reduceMotion ? 1.2 : 1.0)
+                        .opacity(isBreathing && !reduceMotion ? 0.5 : 1.0)
+                        .animation(.easeInOut(duration: 3.0).repeatForever(autoreverses: true), value: isBreathing)
+                }
+                
+                Image(systemName: activeDuration != nil ? "bell.slash.fill" : "bell.slash")
+                    .font(.system(size: 60))
+                    .foregroundColor(activeDuration != nil ? .red : .indigo)
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .frame(height: 150)
             
             Text(activeDuration != nil ? "Silence active" : "Silence")
                 .font(.largeTitle)
                 .fontWeight(.bold)
+                .contentTransition(.interpolate)
             
             if activeDuration != nil {
-                Text("Ends in \(formattedTime(remainingTime))")
-                    .font(.title2)
-                    .foregroundColor(.secondary)
-                    .monospacedDigit()
+                VStack(spacing: 8) {
+                    Text("Ends in")
+                        .font(.title3)
+                        .foregroundColor(.secondary)
+                    
+                    Text(formattedTime(remainingTime))
+                        .font(.system(size: 40, weight: .bold, design: .monospaced))
+                        .foregroundColor(.primary)
+                        .contentTransition(.numericText())
+                }
+                .transition(.scale(scale: 0.9).combined(with: .opacity))
                 
-                Button("End Silence") {
-                    withAnimation {
+                Button(action: {
+                    withAnimation(GhostUI.gentleSpring) {
                         activeDuration = nil
                         remainingTime = 0
+                        isBreathing = false
                         ActivityTrackingService.shared.isTrackingEnabled = true
                     }
+                }) {
+                    Text("End Silence")
+                        .font(.headline)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 12)
+                        .background(Color.red)
+                        .foregroundColor(.white)
+                        .cornerRadius(12)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .tint(.red)
+                .buttonStyle(.plain)
+                .hoverScaleEffect()
                 .padding(.top, 20)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             } else {
                 Text("Temporarily disappear from distractions.")
                     .font(.title3)
                     .foregroundColor(.secondary)
+                    .transition(.move(edge: .top).combined(with: .opacity))
                 
                 VStack(spacing: 16) {
                     Text("For how long?")
@@ -52,24 +84,36 @@ struct SilenceView: View {
                     
                     HStack(spacing: 12) {
                         ForEach(durations, id: \.name) { duration in
-                            Button(duration.name) {
+                            Button(action: {
                                 startSilence(duration.value)
+                            }) {
+                                Text(duration.name)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 10)
+                                    .background(Color(NSColor.controlBackgroundColor))
+                                    .cornerRadius(8)
                             }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(.plain)
+                            .hoverScaleEffect()
                         }
                     }
                 }
                 .padding(.top, 20)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(GhostUI.gentleSpring, value: activeDuration)
         .onReceive(timer) { _ in
             if activeDuration != nil {
                 if remainingTime > 0 {
-                    remainingTime -= 1
+                    withAnimation(GhostUI.smoothFade) {
+                        remainingTime -= 1
+                    }
                 } else {
-                    withAnimation {
+                    withAnimation(GhostUI.gentleSpring) {
                         activeDuration = nil
+                        isBreathing = false
                         ActivityTrackingService.shared.isTrackingEnabled = true
                     }
                 }
@@ -78,17 +122,19 @@ struct SilenceView: View {
     }
     
     private func startSilence(_ duration: TimeInterval) {
-        withAnimation {
+        withAnimation(GhostUI.gentleSpring) {
             activeDuration = duration
             remainingTime = duration
             ActivityTrackingService.shared.isTrackingEnabled = false
+            isBreathing = true
         }
     }
     
     private func formattedTime(_ time: TimeInterval) -> String {
         let formatter = DateComponentsFormatter()
         formatter.allowedUnits = [.hour, .minute, .second]
-        formatter.unitsStyle = .abbreviated
+        formatter.unitsStyle = .positional
+        formatter.zeroFormattingBehavior = .pad
         return formatter.string(from: time) ?? ""
     }
 }
